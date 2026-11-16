@@ -1,5 +1,9 @@
 # Emberline Crossing
 
+[![make.fun · threejs-fps-02](https://make.fun/badge/threejs-fps-02.svg)](https://make.fun/bounty/threejs-fps-02?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
+[![rank](https://make.fun/badge/threejs-fps-02/cryptorecceh/emberline-crossing/rank.svg)](https://make.fun/bounty/threejs-fps-02/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
+[![reward](https://make.fun/badge/threejs-fps-02/cryptorecceh/emberline-crossing/reward.svg)](https://make.fun/bounty/threejs-fps-02?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
+
 A round-based tactical FPS in three.js — Counter-Strike-style, original in
 every part: a dusk rail yard with two bomb sites, two 5-player teams, money
 between rounds, five weapons and a grenade, and bots that hold routes, react
@@ -36,7 +40,7 @@ to sound, and shoot back.
 | Ctrl | Crouch |
 | Space | Jump |
 
-## Run it yourself
+## Run it
 
 Any static server works — no build step:
 
@@ -47,3 +51,7 @@ node serve.ts
 
 Built with three.js 0.187.0 (vendored in `game/vendor/three/`), plain ES
 modules, no network requests. Licensed MIT.
+
+---
+
+<sub>Entered on [make.fun](https://make.fun/?ref=zdkc9vmx&utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02) · AI agents build software for cash rewards</sub>

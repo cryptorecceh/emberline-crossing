@@ -16,11 +16,11 @@ import { createHud } from './hud.js';
 import { createRounds, BUY_SECONDS } from './rounds.js';
 import { Sfx } from './audio.js';
 
-const FIXED_STEP = 1 / 60;
-const params = new URLSearchParams(window.location.search);
-const shot = params.get('shot');
-const seed = Number.parseInt(params.get('seed') ?? '1', 10) || 1;
-const random = mulberry32(seed);
+const STEP = 1 / 60;
+const query = new URLSearchParams(window.location.search);
+const shotName = query.get('shot');
+const shotSeed = Number.parseInt(query.get('seed') ?? '1', 10) || 1;
+const rng = mulberry32(shotSeed);
 
 window.__errors = [];
 window.addEventListener('error', (event) => {
@@ -47,8 +47,8 @@ const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerH
 scene.add(camera);
 // Soft fill light riding with the camera: keeps the viewmodel readable
 // without flattening the scene's long dusk shadows.
-const viewLight = new THREE.PointLight('#ffe0b8', 2.0, 4, 1.5);
-camera.add(viewLight);
+const fillLight = new THREE.PointLight('#ffe0b8', 2.0, 4, 1.5);
+camera.add(fillLight);
 
 const world = createWorld(scene);
 const effects = createEffects(scene);
@@ -75,15 +75,15 @@ const touchMode = touch.state.active;
 window.__touchState = touch.state;
 const raycaster = new THREE.Raycaster();
 raycaster.far = 90;
-const direction = new THREE.Vector3();
-const tmpPoint = new THREE.Vector3();
+const aimDir = new THREE.Vector3();
+const hitPoint = new THREE.Vector3();
 // Spray state: consecutive shots climb and drift in a fixed per-weapon
 // pattern (CS-style); the pattern resets after a short pause.
-let sprayIndex = 0;
-let lastShotAt = -10;
-let lookDx = 0;
-let lookDy = 0;
-let prevAds = false;
+let spray = 0;
+let lastShotTime = -10;
+let lookX = 0;
+let lookY = 0;
+let wasAds = false;
 
 let hp = 100;
 let armor = 25;
@@ -94,8 +94,8 @@ let frozen = false;
 let elapsed = 0;
 let accumulator = 0;
 let lastTime = performance.now();
-let lastAmmoMag = -1;
-let lastAmmoReserve = -1;
+let lastMag = -1;
+let lastReserve = -1;
 let dutiesAt = 0;
 let grenade = null;
 let grenadeAt = 0;
@@ -127,7 +127,7 @@ const rounds = createRounds({
     hud.closeBuy();
     hud.setObjective('Plant the charge on Depot (A) or Overpass (B)');
     hud.banner(`ROUND ${round} — GO`, 'Plant the charge or clear the Wardens', '');
-    if (!shot && !touchMode) input.requestLock(); // Touch mode: no pointer lock.
+    if (!shotName && !touchMode) input.requestLock(); // Touch mode: no pointer lock.
   },
   onRoundEnd(emberWon, reason, ember, warden) {
     hud.setScore(ember, warden, rounds.state.round, 15);
@@ -251,7 +251,7 @@ hud.setObjective('Buy weapons — round starts soon');
 hud.openBuy(rounds.state.money, weapon.state.owned);
 
 hud.onPlay(() => {
-  if (shot) return;
+  if (shotName) return;
   Sfx.unlock();
   if (rounds.state.matchOver) {
     location.reload();
@@ -271,7 +271,7 @@ hud.onPlay(() => {
 });
 
 function onLockChange(locked) {
-  if (shot) return;
+  if (shotName) return;
   if (!locked && rounds.state.phase === 'live' && hp > 0 && !rounds.state.matchOver) {
     hud.showOverlay('paused');
   }
@@ -309,19 +309,19 @@ function shoot(spread) {
     return true;
   }
   const now = performance.now() / 1000;
-  if (now - lastShotAt > 0.35) sprayIndex = 0;
-  else sprayIndex += 1;
-  lastShotAt = now;
-  camera.getWorldDirection(direction);
-  direction.x += (random() * 2 - 1) * spread;
-  direction.y += (random() * 2 - 1) * spread;
-  direction.z += (random() * 2 - 1) * spread;
-  direction.normalize();
+  if (now - lastShotTime > 0.35) spray = 0;
+  else spray += 1;
+  lastShotTime = now;
+  camera.getWorldDirection(aimDir);
+  aimDir.x += (rng() * 2 - 1) * spread;
+  aimDir.y += (rng() * 2 - 1) * spread;
+  aimDir.z += (rng() * 2 - 1) * spread;
+  aimDir.normalize();
   scene.updateMatrixWorld(true);
-  raycaster.set(camera.position, direction);
+  raycaster.set(camera.position, aimDir);
   const pool = shootables();
   const hit = raycaster.intersectObjects(pool, false)[0];
-  const endPoint = hit ? hit.point.clone() : camera.position.clone().addScaledVector(direction, 80);
+  const endPoint = hit ? hit.point.clone() : camera.position.clone().addScaledVector(aimDir, 80);
   effects.fireTracer(weapon.muzzlePosition(), endPoint);
   if (hit) {
     const normal = hit.face
@@ -348,12 +348,13 @@ function shoot(spread) {
     }
   }
   weapon.pullTrigger();
+
   // Recoil pattern: the climb grows through a burst, the horizontal drift
   // follows the weapon's spray table — not random shake.
   const def = weapon.def();
-  const climb = def.recoilPitch * (1 + Math.min(sprayIndex, 8) * 0.07);
+  const climb = def.recoilPitch * (1 + Math.min(spray, 8) * 0.07);
   const yawTable = def.sprayYaw || [0];
-  const drift = (yawTable[sprayIndex % yawTable.length] || 0) * (def.recoilYaw ?? 1) * 0.004;
+  const drift = (yawTable[spray % yawTable.length] || 0) * (def.recoilYaw ?? 1) * 0.004;
   player.recoil(0.009 + climb, drift);
   bots.hearShot(player.state.position, 26);
   hud.setAmmo(weapon.state.mag, weapon.state.reserve, weapon.def().name);
@@ -366,13 +367,13 @@ function throwGrenade() {
     new THREE.SphereGeometry(0.09, 10, 8),
     new THREE.MeshStandardMaterial({ color: '#3a4a2a', roughness: 0.7, metalness: 0.3 }),
   );
-  camera.getWorldDirection(direction);
-  mesh.position.copy(camera.position).addScaledVector(direction, 0.6);
+  camera.getWorldDirection(aimDir);
+  mesh.position.copy(camera.position).addScaledVector(aimDir, 0.6);
   mesh.position.y -= 0.1;
   scene.add(mesh);
   grenade = {
     mesh,
-    velocity: direction.clone().multiplyScalar(15).add(new THREE.Vector3(0, 5, 0)),
+    velocity: aimDir.clone().multiplyScalar(15).add(new THREE.Vector3(0, 5, 0)),
     bounces: 0,
   };
   grenadeAt = performance.now() / 1000;
@@ -479,13 +480,13 @@ function step(dt) {
     hud.setTimer(rounds.state.timer);
     hud.minimapDraw(player.state, bots.bots, SITES, null);
   }
-  weapon.step(dt, now, (input.state.ads || touch.state.ads) ? 1 : 0, lookDx, lookDy);
+  weapon.step(dt, now, (input.state.ads || touch.state.ads) ? 1 : 0, lookX, lookY);
   // Ammo HUD refresh: a reload finishes inside weapon.step() with no event
   // of its own — without this the display stays stale after reloading.
-  if (weapon.state.mag !== lastAmmoMag || weapon.state.reserve !== lastAmmoReserve) {
+  if (weapon.state.mag !== lastMag || weapon.state.reserve !== lastReserve) {
     hud.setAmmo(weapon.state.mag, weapon.state.reserve, weapon.def().name);
-    lastAmmoMag = weapon.state.mag;
-    lastAmmoReserve = weapon.state.reserve;
+    lastMag = weapon.state.mag;
+    lastReserve = weapon.state.reserve;
   }
   effects.step(dt, elapsed);
 }
@@ -497,12 +498,12 @@ function frame(now) {
   lastTime = now;
   if (!frozen) {
     const look = input.takeLook();
-    lookDx = look.x;
-    lookDy = look.y;
+    lookX = look.x;
+    lookY = look.y;
     player.look(look.x, look.y);
     const adsNow = input.state.ads || touch.state.ads;
-    if (adsNow && !prevAds) Sfx.ads();
-    prevAds = adsNow;
+    if (adsNow && !wasAds) Sfx.ads();
+    wasAds = adsNow;
     hud.setScope(weapon.state.current === 'dmr' && weapon.state.ads > 0.6);
     if ((input.state.firing || touch.state.firing) && weapon.ready() && hp > 0 && rounds.state.phase !== 'buy') {
       shoot(weapon.spread(player.groundSpeed()));
@@ -521,19 +522,19 @@ function frame(now) {
     prevB = bDown;
     accumulator += dt;
     let steps = 0;
-    while (accumulator >= FIXED_STEP && steps < 5) {
-      step(FIXED_STEP);
-      accumulator -= FIXED_STEP;
+    while (accumulator >= STEP && steps < 5) {
+      step(STEP);
+      accumulator -= STEP;
       steps += 1;
     }
-    if (accumulator > FIXED_STEP * 5) accumulator = 0;
+    if (accumulator > STEP * 5) accumulator = 0;
     syncCamera();
   }
   renderer.render(scene, camera);
 }
 
 function settle(steps) {
-  for (let i = 0; i < steps; i += 1) step(FIXED_STEP);
+  for (let i = 0; i < steps; i += 1) step(STEP);
 }
 
 function runShot(name) {
@@ -683,7 +684,7 @@ if (touchMode) {
   extra.textContent = 'Mode sentuh: joystick kiri untuk gerak, geser area kanan untuk melihat, tombol TEMBAK untuk menembak, ADS untuk membidik.';
 }
 syncCamera();
-if (shot) runShot(shot);
+if (shotName) runShot(shotName);
 else requestAnimationFrame(frame);
 
 void MAP;

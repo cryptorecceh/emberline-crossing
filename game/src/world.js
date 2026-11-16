@@ -74,7 +74,7 @@ export const ROUTES = {
   defendMid: [[0, -15], [-6, -9], [4, -9], [0, -12]],
 };
 
-function skyMaterial() {
+function makeSky() {
   return new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -113,7 +113,7 @@ function skyMaterial() {
   });
 }
 
-function textSpriteTexture(text, color, sub) {
+function makeLabelTexture(text, color, sub) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 128;
@@ -274,7 +274,7 @@ export function createWorld(scene) {
 
   // Site letters floating over the sites (A / B) — big, emissive, readable.
   for (const site of SITES) {
-    const tex = textSpriteTexture(`SITE ${site.name}`, THEME.accent, site.label);
+    const tex = makeLabelTexture(`SITE ${site.name}`, THEME.accent, site.label);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
       map: tex, transparent: true, depthWrite: false, fog: false,
     }));
@@ -309,7 +309,7 @@ export function createWorld(scene) {
   door.position.set(-15, 1.5, -17.19);
   group.add(door);
   const depotSign = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: textSpriteTexture('DEPOT 7', THEME.accent, 'WAREHOUSE'), transparent: true, depthWrite: false, fog: false,
+    map: makeLabelTexture('DEPOT 7', THEME.accent, 'WAREHOUSE'), transparent: true, depthWrite: false, fog: false,
   }));
   depotSign.scale.set(4.5, 1.1, 1);
   depotSign.position.set(-15, 4.9, -16.9);
@@ -462,7 +462,7 @@ export function createWorld(scene) {
   // ---- Cables strung between lamp posts (sagging, 3 segments each) ----
   const cableMat = new THREE.MeshBasicMaterial({ color: '#14100c' });
   const cableUp = new THREE.Vector3(0, 1, 0);
-  function cable(points) {
+  function runCable(points) {
     for (let i = 0; i < points.length - 1; i += 1) {
       const a = points[i];
       const b = points[i + 1];
@@ -474,11 +474,11 @@ export function createWorld(scene) {
       group.add(seg);
     }
   }
-  cable([
+  runCable([
     new THREE.Vector3(-8, 4.4, 2), new THREE.Vector3(-2.7, 4.05, 2),
     new THREE.Vector3(2.7, 4.05, 2), new THREE.Vector3(8, 4.4, 2),
   ]);
-  cable([
+  runCable([
     new THREE.Vector3(-8, 4.4, -10), new THREE.Vector3(-2.7, 4.05, -10),
     new THREE.Vector3(2.7, 4.05, -10), new THREE.Vector3(8, 4.4, -10),
   ]);
@@ -546,7 +546,7 @@ export function createWorld(scene) {
       { text: 'SITE B', sub: 'OVERPASS', x: 15, z: -18.9, color: THEME.neonA, w: 6 },
     ];
     for (const s of signs) {
-      const tex = textSpriteTexture(s.text, s.color, s.sub);
+      const tex = makeLabelTexture(s.text, s.color, s.sub);
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
         map: tex, transparent: true, depthWrite: false,
       }));
@@ -570,7 +570,7 @@ export function createWorld(scene) {
   createBuildings(scene);
 
   // Sky dome + sun disc.
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 24, 16), skyMaterial());
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 24, 16), makeSky());
   scene.add(sky);
   const sunDir = new THREE.Vector3(...THEME.sunPosition).normalize();
   const sun = new THREE.Mesh(

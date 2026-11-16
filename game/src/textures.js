@@ -15,7 +15,7 @@ export function mulberry32(initial) {
   };
 }
 
-function canvasTexture(size, painter, { repeat = [1, 1], seed = 1 } = {}) {
+function makeCanvas(size, painter, { repeat = [1, 1], seed = 1 } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -30,7 +30,7 @@ function canvasTexture(size, painter, { repeat = [1, 1], seed = 1 } = {}) {
   return tex;
 }
 
-function speckle(ctx, size, random, count, color, minR, maxR, alpha = 1) {
+function dots(ctx, size, random, count, color, minR, maxR, alpha = 1) {
   ctx.fillStyle = color;
   ctx.globalAlpha = alpha;
   for (let i = 0; i < count; i += 1) {
@@ -42,7 +42,7 @@ function speckle(ctx, size, random, count, color, minR, maxR, alpha = 1) {
   ctx.globalAlpha = 1;
 }
 
-function cracks(ctx, size, random, count, color) {
+function fissures(ctx, size, random, count, color) {
   ctx.strokeStyle = color;
   ctx.lineWidth = 1;
   for (let i = 0; i < count; i += 1) {
@@ -67,7 +67,7 @@ export function groundTexture(seed = 7) {
   const base = THEME.groundBase;
   const patch = THEME.groundPatch;
   const line = THEME.groundLine;
-  const map = canvasTexture(512, (ctx, size, random) => {
+  const map = makeCanvas(512, (ctx, size, random) => {
     ctx.fillStyle = base;
     ctx.fillRect(0, 0, size, size);
     for (let i = 0; i < 46; i += 1) {
@@ -79,9 +79,9 @@ export function groundTexture(seed = 7) {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
-    speckle(ctx, size, random, 2600, patch, 0.6, 2.4, 0.55);
-    speckle(ctx, size, random, 900, line, 0.8, 2.8, 0.5);
-    cracks(ctx, size, random, 9, patch);
+    dots(ctx, size, random, 2600, patch, 0.6, 2.4, 0.55);
+    dots(ctx, size, random, 900, line, 0.8, 2.8, 0.5);
+    fissures(ctx, size, random, 9, patch);
     // Asphalt repair patches: darker rounded slabs with worn edges.
     for (let i = 0; i < 7; i += 1) {
       ctx.fillStyle = patch;
@@ -135,22 +135,22 @@ export function groundTexture(seed = 7) {
     }
     if (THEME.id === 'mist') {
       // Leaf litter and moss clumps.
-      speckle(ctx, size, random, 500, '#3d4a2e', 1, 3, 0.7);
-      speckle(ctx, size, random, 300, '#8a7a3a', 0.8, 2, 0.5);
+      dots(ctx, size, random, 500, '#3d4a2e', 1, 3, 0.7);
+      dots(ctx, size, random, 300, '#8a7a3a', 0.8, 2, 0.5);
     }
   }, { repeat: [9, 8], seed });
-  const bump = canvasTexture(256, (ctx, size, random) => {
+  const bump = makeCanvas(256, (ctx, size, random) => {
     ctx.fillStyle = '#808080';
     ctx.fillRect(0, 0, size, size);
-    speckle(ctx, size, random, 1800, '#5a5a5a', 1, 3, 0.8);
-    speckle(ctx, size, random, 1200, '#a8a8a8', 1, 2.5, 0.8);
+    dots(ctx, size, random, 1800, '#5a5a5a', 1, 3, 0.8);
+    dots(ctx, size, random, 1200, '#a8a8a8', 1, 2.5, 0.8);
   }, { repeat: [9, 8], seed: seed + 31 });
   return { map, bump };
 }
 
 // Stained concrete for walls: panel lines, stains, speckle.
 export function concreteTexture(seed = 11) {
-  return canvasTexture(512, (ctx, size, random) => {
+  return makeCanvas(512, (ctx, size, random) => {
     ctx.fillStyle = THEME.wallConcrete;
     ctx.fillRect(0, 0, size, size);
     for (let i = 0; i < 22; i += 1) {
@@ -175,8 +175,8 @@ export function concreteTexture(seed = 11) {
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
-    speckle(ctx, size, random, 1400, THEME.wallConcreteDark, 0.7, 2.2, 0.32);
-    cracks(ctx, size, random, 5, THEME.wallConcreteDark);
+    dots(ctx, size, random, 1400, THEME.wallConcreteDark, 0.7, 2.2, 0.32);
+    fissures(ctx, size, random, 5, THEME.wallConcreteDark);
     // Damp stains bleeding from the top edge + grime at the base.
     for (let i = 0; i < 6; i += 1) {
       const grad = ctx.createLinearGradient(0, 0, 0, 60 + random() * 120);
@@ -196,7 +196,7 @@ export function concreteTexture(seed = 11) {
 
 // Corrugated metal: vertical ribs, rust streaks, rivets.
 export function metalTexture(seed = 13) {
-  return canvasTexture(512, (ctx, size, random) => {
+  return makeCanvas(512, (ctx, size, random) => {
     ctx.fillStyle = THEME.wallMetal;
     ctx.fillRect(0, 0, size, size);
     for (let x = 0; x < size; x += 32) {
@@ -224,9 +224,9 @@ export function metalTexture(seed = 13) {
         ctx.fill();
       }
     }
-    speckle(ctx, size, random, 900, THEME.wallMetalDark, 0.7, 2, 0.5);
+    dots(ctx, size, random, 900, THEME.wallMetalDark, 0.7, 2, 0.5);
     // Chipped paint: pale flecks where the coating has flaked off.
-    speckle(ctx, size, random, 260, '#c8b490', 0.8, 2.4, 0.6);
+    dots(ctx, size, random, 260, '#c8b490', 0.8, 2.4, 0.6);
     // Heavy rust bloom near the bottom edge.
     for (let i = 0; i < 10; i += 1) {
       ctx.fillStyle = '#4a2410';
@@ -240,7 +240,7 @@ export function metalTexture(seed = 13) {
 
 // Wooden planks: grain lines, knots, plank seams.
 export function woodTexture(seed = 17) {
-  return canvasTexture(512, (ctx, size, random) => {
+  return makeCanvas(512, (ctx, size, random) => {
     ctx.fillStyle = THEME.wood;
     ctx.fillRect(0, 0, size, size);
     const plankH = size / 6;
@@ -275,7 +275,7 @@ export function woodTexture(seed = 17) {
         ctx.stroke();
       }
     }
-    speckle(ctx, size, random, 700, THEME.woodDark, 0.7, 1.8, 0.4);
+    dots(ctx, size, random, 700, THEME.woodDark, 0.7, 1.8, 0.4);
   }, { repeat: [1, 1], seed });
 }
 
@@ -283,10 +283,10 @@ export function woodTexture(seed = 17) {
 export function crateTexture(seed = 19, tint = null) {
   const face = tint || THEME.crateA;
   const dark = THEME.crateB;
-  return canvasTexture(256, (ctx, size, random) => {
+  return makeCanvas(256, (ctx, size, random) => {
     ctx.fillStyle = face;
     ctx.fillRect(0, 0, size, size);
-    speckle(ctx, size, random, 500, dark, 0.8, 2, 0.5);
+    dots(ctx, size, random, 500, dark, 0.8, 2, 0.5);
     ctx.fillStyle = dark;
     ctx.globalAlpha = 0.85;
     ctx.fillRect(0, 0, size, 14);
@@ -403,7 +403,7 @@ export function buildingFacadeTexture(seed = 41, {
 // Roll-up warehouse door: horizontal slats + hazard stripe at the base.
 export function doorTexture(seed = 53) {
   const random = mulberry32(seed);
-  return canvasTexture(256, (ctx, size) => {
+  return makeCanvas(256, (ctx, size) => {
     ctx.fillStyle = '#5d6066';
     ctx.fillRect(0, 0, size, size);
     for (let y = 0; y < size; y += 18) {
@@ -412,7 +412,7 @@ export function doorTexture(seed = 53) {
       ctx.fillStyle = '#6e7278';
       ctx.fillRect(0, y + 4, size, 2);
     }
-    speckle(ctx, size, random, 500, '#3a3d42', 0.8, 2, 0.5);
+    dots(ctx, size, random, 500, '#3a3d42', 0.8, 2, 0.5);
     // Hazard stripe along the bottom.
     for (let i = 0; i < 8; i += 1) {
       ctx.fillStyle = i % 2 ? '#c8a52a' : '#1c1c1c';
@@ -439,8 +439,8 @@ export function roadTexture(seed = 61) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#3a3630';
   ctx.fillRect(0, 0, 128, 512);
-  speckle(ctx, 128, random, 700, '#2a2723', 0.8, 2.4, 0.6);
-  speckle(ctx, 128, random, 300, '#4a463e', 0.8, 2, 0.5);
+  dots(ctx, 128, random, 700, '#2a2723', 0.8, 2.4, 0.6);
+  dots(ctx, 128, random, 300, '#4a463e', 0.8, 2, 0.5);
   // Edge lines.
   ctx.fillStyle = '#c8c2ae';
   ctx.globalAlpha = 0.55;
@@ -553,7 +553,7 @@ export function posterTexture(seed = 83, title = 'EMBERLINE', color = '#e8843c')
   ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.strokeRect(4, 4, 120, 184);
-  speckle(ctx, 128, random, 120, '#8a8578', 0.8, 2, 0.4);
+  dots(ctx, 128, random, 120, '#8a8578', 0.8, 2, 0.4);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;

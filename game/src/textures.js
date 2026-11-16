@@ -4,278 +4,278 @@
 import * as THREE from 'three';
 import { THEME } from './palette.js';
 
-export function mulberry32(initial) {
-  let a = initial;
-  return function random() {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+export function mulberry32(seed) {
+  let state = seed;
+  return function next() {
+    state |= 0;
+    state = (state + 0x6d2b79f5) | 0;
+    let mix = Math.imul(state ^ (state >>> 15), 1 | state);
+    mix = (mix + Math.imul(mix ^ (mix >>> 7), 61 | mix)) ^ mix;
+    return ((mix ^ (mix >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-function makeCanvas(size, painter, { repeat = [1, 1], seed = 1 } = {}) {
+function paintCanvas(side, draw, { repeat: tile = [1, 1], seed = 1 } = {}) {
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  painter(ctx, size, mulberry32(seed));
+  canvas.width = side;
+  canvas.height = side;
+  const g = canvas.getContext('2d');
+  draw(g, side, mulberry32(seed));
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeat[0], repeat[1]);
+  tex.repeat.set(tile[0], tile[1]);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   return tex;
 }
 
-function dots(ctx, size, random, count, color, minR, maxR, alpha = 1) {
-  ctx.fillStyle = color;
-  ctx.globalAlpha = alpha;
-  for (let i = 0; i < count; i += 1) {
-    const r = minR + random() * (maxR - minR);
-    ctx.beginPath();
-    ctx.arc(random() * size, random() * size, r, 0, Math.PI * 2);
-    ctx.fill();
+function speckle(g, side, next, n, fill, lo, hi, a = 1) {
+  g.fillStyle = fill;
+  g.globalAlpha = a;
+  for (let i = 0; i < n; i += 1) {
+    const r = lo + next() * (hi - lo);
+    g.beginPath();
+    g.arc(next() * side, next() * side, r, 0, Math.PI * 2);
+    g.fill();
   }
-  ctx.globalAlpha = 1;
+  g.globalAlpha = 1;
 }
 
-function fissures(ctx, size, random, count, color) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  for (let i = 0; i < count; i += 1) {
-    let x = random() * size;
-    let y = random() * size;
-    ctx.globalAlpha = 0.25 + random() * 0.35;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    const segs = 3 + Math.floor(random() * 4);
+function cracks(g, side, next, n, fill) {
+  g.strokeStyle = fill;
+  g.lineWidth = 1;
+  for (let i = 0; i < n; i += 1) {
+    let x = next() * side;
+    let y = next() * side;
+    g.globalAlpha = 0.25 + next() * 0.35;
+    g.beginPath();
+    g.moveTo(x, y);
+    const segs = 3 + Math.floor(next() * 4);
     for (let s = 0; s < segs; s += 1) {
-      x += (random() - 0.5) * 70;
-      y += (random() - 0.5) * 70;
-      ctx.lineTo(x, y);
+      x += (next() - 0.5) * 70;
+      y += (next() - 0.5) * 70;
+      g.lineTo(x, y);
     }
-    ctx.stroke();
+    g.stroke();
   }
-  ctx.globalAlpha = 1;
+  g.globalAlpha = 1;
 }
 
 // Sand / asphalt / moss ground: base colour, darker patches, speckles, cracks.
 export function groundTexture(seed = 7) {
-  const base = THEME.groundBase;
-  const patch = THEME.groundPatch;
-  const line = THEME.groundLine;
-  const map = makeCanvas(512, (ctx, size, random) => {
-    ctx.fillStyle = base;
-    ctx.fillRect(0, 0, size, size);
+  const dirt = THEME.groundBase;
+  const mottle = THEME.groundPatch;
+  const streak = THEME.groundLine;
+  const top = paintCanvas(512, (g, side, next) => {
+    g.fillStyle = dirt;
+    g.fillRect(0, 0, side, side);
     for (let i = 0; i < 46; i += 1) {
-      ctx.fillStyle = random() < 0.5 ? patch : line;
-      ctx.globalAlpha = 0.08 + random() * 0.14;
-      const r = 18 + random() * 70;
-      ctx.beginPath();
-      ctx.ellipse(random() * size, random() * size, r, r * (0.5 + random() * 0.7), random() * Math.PI, 0, Math.PI * 2);
-      ctx.fill();
+      g.fillStyle = next() < 0.5 ? mottle : streak;
+      g.globalAlpha = 0.08 + next() * 0.14;
+      const r = 18 + next() * 70;
+      g.beginPath();
+      g.ellipse(next() * side, next() * side, r, r * (0.5 + next() * 0.7), next() * Math.PI, 0, Math.PI * 2);
+      g.fill();
     }
-    ctx.globalAlpha = 1;
-    dots(ctx, size, random, 2600, patch, 0.6, 2.4, 0.55);
-    dots(ctx, size, random, 900, line, 0.8, 2.8, 0.5);
-    fissures(ctx, size, random, 9, patch);
+    g.globalAlpha = 1;
+    speckle(g, side, next, 2600, mottle, 0.6, 2.4, 0.55);
+    speckle(g, side, next, 900, streak, 0.8, 2.8, 0.5);
+    cracks(g, side, next, 9, mottle);
     // Asphalt repair patches: darker rounded slabs with worn edges.
     for (let i = 0; i < 7; i += 1) {
-      ctx.fillStyle = patch;
-      ctx.globalAlpha = 0.22 + random() * 0.2;
-      const px = random() * size;
-      const py = random() * size;
-      const pw = 40 + random() * 90;
-      const ph = 26 + random() * 60;
-      ctx.beginPath();
-      ctx.roundRect(px, py, pw, ph, 8);
-      ctx.fill();
-      ctx.globalAlpha = 0.5;
-      ctx.strokeStyle = line;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(px, py, pw, ph, 8);
-      ctx.stroke();
+      g.fillStyle = mottle;
+      g.globalAlpha = 0.22 + next() * 0.2;
+      const px = next() * side;
+      const py = next() * side;
+      const pw = 40 + next() * 90;
+      const ph = 26 + next() * 60;
+      g.beginPath();
+      g.roundRect(px, py, pw, ph, 8);
+      g.fill();
+      g.globalAlpha = 0.5;
+      g.strokeStyle = streak;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.roundRect(px, py, pw, ph, 8);
+      g.stroke();
     }
     // Tire scuff arcs and oil stains.
     for (let i = 0; i < 6; i += 1) {
-      ctx.strokeStyle = patch;
-      ctx.globalAlpha = 0.18 + random() * 0.2;
-      ctx.lineWidth = 5 + random() * 7;
-      ctx.beginPath();
-      ctx.arc(random() * size, random() * size, 30 + random() * 60, random() * Math.PI, random() * Math.PI + 1.2 + random());
-      ctx.stroke();
+      g.strokeStyle = mottle;
+      g.globalAlpha = 0.18 + next() * 0.2;
+      g.lineWidth = 5 + next() * 7;
+      g.beginPath();
+      g.arc(next() * side, next() * side, 30 + next() * 60, next() * Math.PI, next() * Math.PI + 1.2 + next());
+      g.stroke();
     }
     for (let i = 0; i < 5; i += 1) {
-      ctx.fillStyle = '#1a1512';
-      ctx.globalAlpha = 0.25 + random() * 0.25;
-      ctx.beginPath();
-      ctx.ellipse(random() * size, random() * size, 10 + random() * 26, 7 + random() * 16, random() * Math.PI, 0, Math.PI * 2);
-      ctx.fill();
+      g.fillStyle = '#1a1512';
+      g.globalAlpha = 0.25 + next() * 0.25;
+      g.beginPath();
+      g.ellipse(next() * side, next() * side, 10 + next() * 26, 7 + next() * 16, next() * Math.PI, 0, Math.PI * 2);
+      g.fill();
     }
-    ctx.globalAlpha = 1;
+    g.globalAlpha = 1;
     if (THEME.id === 'neon') {
       // Faded lane paint on wet asphalt.
-      ctx.fillStyle = '#c8b45a';
-      ctx.globalAlpha = 0.28;
-      ctx.fillRect(size * 0.48, 0, 5, size);
-      ctx.globalAlpha = 1;
+      g.fillStyle = '#c8b45a';
+      g.globalAlpha = 0.28;
+      g.fillRect(side * 0.48, 0, 5, side);
+      g.globalAlpha = 1;
       // Puddle sheen: pale soft blobs.
       for (let i = 0; i < 8; i += 1) {
-        ctx.fillStyle = '#8fb4d8';
-        ctx.globalAlpha = 0.1 + random() * 0.12;
-        ctx.beginPath();
-        ctx.ellipse(random() * size, random() * size, 22 + random() * 46, 14 + random() * 26, random() * Math.PI, 0, Math.PI * 2);
-        ctx.fill();
+        g.fillStyle = '#8fb4d8';
+        g.globalAlpha = 0.1 + next() * 0.12;
+        g.beginPath();
+        g.ellipse(next() * side, next() * side, 22 + next() * 46, 14 + next() * 26, next() * Math.PI, 0, Math.PI * 2);
+        g.fill();
       }
-      ctx.globalAlpha = 1;
+      g.globalAlpha = 1;
     }
     if (THEME.id === 'mist') {
       // Leaf litter and moss clumps.
-      dots(ctx, size, random, 500, '#3d4a2e', 1, 3, 0.7);
-      dots(ctx, size, random, 300, '#8a7a3a', 0.8, 2, 0.5);
+      speckle(g, side, next, 500, '#3d4a2e', 1, 3, 0.7);
+      speckle(g, side, next, 300, '#8a7a3a', 0.8, 2, 0.5);
     }
   }, { repeat: [9, 8], seed });
-  const bump = makeCanvas(256, (ctx, size, random) => {
-    ctx.fillStyle = '#808080';
-    ctx.fillRect(0, 0, size, size);
-    dots(ctx, size, random, 1800, '#5a5a5a', 1, 3, 0.8);
-    dots(ctx, size, random, 1200, '#a8a8a8', 1, 2.5, 0.8);
+  const relief = paintCanvas(256, (g, side, next) => {
+    g.fillStyle = '#808080';
+    g.fillRect(0, 0, side, side);
+    speckle(g, side, next, 1800, '#5a5a5a', 1, 3, 0.8);
+    speckle(g, side, next, 1200, '#a8a8a8', 1, 2.5, 0.8);
   }, { repeat: [9, 8], seed: seed + 31 });
-  return { map, bump };
+  return { map: top, bump: relief };
 }
 
 // Stained concrete for walls: panel lines, stains, speckle.
 export function concreteTexture(seed = 11) {
-  return makeCanvas(512, (ctx, size, random) => {
-    ctx.fillStyle = THEME.wallConcrete;
-    ctx.fillRect(0, 0, size, size);
+  return paintCanvas(512, (g, side, next) => {
+    g.fillStyle = THEME.wallConcrete;
+    g.fillRect(0, 0, side, side);
     for (let i = 0; i < 22; i += 1) {
-      ctx.fillStyle = THEME.wallConcreteDark;
-      ctx.globalAlpha = 0.06 + random() * 0.12;
-      const w = 30 + random() * 90;
-      ctx.fillRect(random() * size, random() * size, w, 12 + random() * 40);
+      g.fillStyle = THEME.wallConcreteDark;
+      g.globalAlpha = 0.06 + next() * 0.12;
+      const w = 30 + next() * 90;
+      g.fillRect(next() * side, next() * side, w, 12 + next() * 40);
     }
-    ctx.globalAlpha = 1;
+    g.globalAlpha = 1;
     // Panel seams.
-    ctx.strokeStyle = THEME.wallConcreteDark;
-    ctx.globalAlpha = 0.55;
-    ctx.lineWidth = 2;
+    g.strokeStyle = THEME.wallConcreteDark;
+    g.globalAlpha = 0.55;
+    g.lineWidth = 2;
     for (let i = 1; i < 4; i += 1) {
-      ctx.beginPath();
-      ctx.moveTo(0, (size / 4) * i);
-      ctx.lineTo(size, (size / 4) * i);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo((size / 4) * i, 0);
-      ctx.lineTo((size / 4) * i, size);
-      ctx.stroke();
+      g.beginPath();
+      g.moveTo(0, (side / 4) * i);
+      g.lineTo(side, (side / 4) * i);
+      g.stroke();
+      g.beginPath();
+      g.moveTo((side / 4) * i, 0);
+      g.lineTo((side / 4) * i, side);
+      g.stroke();
     }
-    ctx.globalAlpha = 1;
-    dots(ctx, size, random, 1400, THEME.wallConcreteDark, 0.7, 2.2, 0.32);
-    fissures(ctx, size, random, 5, THEME.wallConcreteDark);
+    g.globalAlpha = 1;
+    speckle(g, side, next, 1400, THEME.wallConcreteDark, 0.7, 2.2, 0.32);
+    cracks(g, side, next, 5, THEME.wallConcreteDark);
     // Damp stains bleeding from the top edge + grime at the base.
     for (let i = 0; i < 6; i += 1) {
-      const grad = ctx.createLinearGradient(0, 0, 0, 60 + random() * 120);
+      const grad = g.createLinearGradient(0, 0, 0, 60 + next() * 120);
       grad.addColorStop(0, THEME.wallConcreteDark);
       grad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.globalAlpha = 0.12 + random() * 0.15;
-      ctx.fillStyle = grad;
-      const w = 20 + random() * 50;
-      ctx.fillRect(random() * size, 0, w, 60 + random() * 120);
+      g.globalAlpha = 0.12 + next() * 0.15;
+      g.fillStyle = grad;
+      const w = 20 + next() * 50;
+      g.fillRect(next() * side, 0, w, 60 + next() * 120);
     }
-    ctx.globalAlpha = 0.16;
-    ctx.fillStyle = THEME.wallConcreteDark;
-    ctx.fillRect(0, size - 26, size, 26);
-    ctx.globalAlpha = 1;
+    g.globalAlpha = 0.16;
+    g.fillStyle = THEME.wallConcreteDark;
+    g.fillRect(0, side - 26, side, 26);
+    g.globalAlpha = 1;
   }, { repeat: [1, 1], seed });
 }
 
 // Corrugated metal: vertical ribs, rust streaks, rivets.
 export function metalTexture(seed = 13) {
-  return makeCanvas(512, (ctx, size, random) => {
-    ctx.fillStyle = THEME.wallMetal;
-    ctx.fillRect(0, 0, size, size);
-    for (let x = 0; x < size; x += 32) {
-      const grad = ctx.createLinearGradient(x, 0, x + 32, 0);
+  return paintCanvas(512, (g, side, next) => {
+    g.fillStyle = THEME.wallMetal;
+    g.fillRect(0, 0, side, side);
+    for (let x = 0; x < side; x += 32) {
+      const grad = g.createLinearGradient(x, 0, x + 32, 0);
       grad.addColorStop(0, THEME.wallMetalDark);
       grad.addColorStop(0.5, THEME.wallMetal);
       grad.addColorStop(1, THEME.wallMetalDark);
-      ctx.fillStyle = grad;
-      ctx.fillRect(x, 0, 32, size);
+      g.fillStyle = grad;
+      g.fillRect(x, 0, 32, side);
     }
     // Rust streaks running down.
     for (let i = 0; i < 26; i += 1) {
-      ctx.fillStyle = THEME.wallMetalDark;
-      ctx.globalAlpha = 0.15 + random() * 0.3;
-      const x = random() * size;
-      ctx.fillRect(x, random() * size * 0.4, 3 + random() * 6, 40 + random() * 120);
+      g.fillStyle = THEME.wallMetalDark;
+      g.globalAlpha = 0.15 + next() * 0.3;
+      const x = next() * side;
+      g.fillRect(x, next() * side * 0.4, 3 + next() * 6, 40 + next() * 120);
     }
-    ctx.globalAlpha = 1;
+    g.globalAlpha = 1;
     // Rivets along the ribs.
-    ctx.fillStyle = THEME.wallMetalDark;
-    for (let x = 16; x < size; x += 32) {
-      for (let y = 16; y < size; y += 64) {
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill();
+    g.fillStyle = THEME.wallMetalDark;
+    for (let x = 16; x < side; x += 32) {
+      for (let y = 16; y < side; y += 64) {
+        g.beginPath();
+        g.arc(x, y, 3, 0, Math.PI * 2);
+        g.fill();
       }
     }
-    dots(ctx, size, random, 900, THEME.wallMetalDark, 0.7, 2, 0.5);
+    speckle(g, side, next, 900, THEME.wallMetalDark, 0.7, 2, 0.5);
     // Chipped paint: pale flecks where the coating has flaked off.
-    dots(ctx, size, random, 260, '#c8b490', 0.8, 2.4, 0.6);
+    speckle(g, side, next, 260, '#c8b490', 0.8, 2.4, 0.6);
     // Heavy rust bloom near the bottom edge.
     for (let i = 0; i < 10; i += 1) {
-      ctx.fillStyle = '#4a2410';
-      ctx.globalAlpha = 0.2 + random() * 0.25;
-      const x = random() * size;
-      ctx.fillRect(x, size - 30 - random() * 60, 4 + random() * 10, 30 + random() * 60);
+      g.fillStyle = '#4a2410';
+      g.globalAlpha = 0.2 + next() * 0.25;
+      const x = next() * side;
+      g.fillRect(x, side - 30 - next() * 60, 4 + next() * 10, 30 + next() * 60);
     }
-    ctx.globalAlpha = 1;
+    g.globalAlpha = 1;
   }, { repeat: [1, 1], seed });
 }
 
 // Wooden planks: grain lines, knots, plank seams.
 export function woodTexture(seed = 17) {
-  return makeCanvas(512, (ctx, size, random) => {
-    ctx.fillStyle = THEME.wood;
-    ctx.fillRect(0, 0, size, size);
-    const plankH = size / 6;
+  return paintCanvas(512, (g, side, next) => {
+    g.fillStyle = THEME.wood;
+    g.fillRect(0, 0, side, side);
+    const plankH = side / 6;
     for (let p = 0; p < 6; p += 1) {
-      ctx.fillStyle = p % 2 ? THEME.wood : THEME.woodDark;
-      ctx.globalAlpha = 0.18;
-      ctx.fillRect(0, p * plankH, size, plankH);
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = THEME.woodDark;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, p * plankH);
-      ctx.lineTo(size, p * plankH);
-      ctx.stroke();
+      g.fillStyle = p % 2 ? THEME.wood : THEME.woodDark;
+      g.globalAlpha = 0.18;
+      g.fillRect(0, p * plankH, side, plankH);
+      g.globalAlpha = 1;
+      g.strokeStyle = THEME.woodDark;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(0, p * plankH);
+      g.lineTo(side, p * plankH);
+      g.stroke();
       // Grain.
-      ctx.strokeStyle = THEME.woodDark;
-      ctx.globalAlpha = 0.35;
-      ctx.lineWidth = 1;
-      for (let g = 0; g < 7; g += 1) {
-        const y = p * plankH + 6 + random() * (plankH - 12);
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.bezierCurveTo(size * 0.3, y + (random() - 0.5) * 8, size * 0.7, y + (random() - 0.5) * 8, size, y);
-        ctx.stroke();
+      g.strokeStyle = THEME.woodDark;
+      g.globalAlpha = 0.35;
+      g.lineWidth = 1;
+      for (let k = 0; k < 7; k += 1) {
+        const y = p * plankH + 6 + next() * (plankH - 12);
+        g.beginPath();
+        g.moveTo(0, y);
+        g.bezierCurveTo(side * 0.3, y + (next() - 0.5) * 8, side * 0.7, y + (next() - 0.5) * 8, side, y);
+        g.stroke();
       }
-      ctx.globalAlpha = 1;
+      g.globalAlpha = 1;
       // Knot.
-      if (random() < 0.7) {
-        ctx.strokeStyle = THEME.woodDark;
-        ctx.beginPath();
-        ctx.ellipse(random() * size, p * plankH + plankH / 2, 7, 4.5, 0, 0, Math.PI * 2);
-        ctx.stroke();
+      if (next() < 0.7) {
+        g.strokeStyle = THEME.woodDark;
+        g.beginPath();
+        g.ellipse(next() * side, p * plankH + plankH / 2, 7, 4.5, 0, 0, Math.PI * 2);
+        g.stroke();
       }
     }
-    dots(ctx, size, random, 700, THEME.woodDark, 0.7, 1.8, 0.4);
+    speckle(g, side, next, 700, THEME.woodDark, 0.7, 1.8, 0.4);
   }, { repeat: [1, 1], seed });
 }
 
@@ -283,32 +283,32 @@ export function woodTexture(seed = 17) {
 export function crateTexture(seed = 19, tint = null) {
   const face = tint || THEME.crateA;
   const dark = THEME.crateB;
-  return makeCanvas(256, (ctx, size, random) => {
-    ctx.fillStyle = face;
-    ctx.fillRect(0, 0, size, size);
-    dots(ctx, size, random, 500, dark, 0.8, 2, 0.5);
-    ctx.fillStyle = dark;
-    ctx.globalAlpha = 0.85;
-    ctx.fillRect(0, 0, size, 14);
-    ctx.fillRect(0, size - 14, size, 14);
-    ctx.fillRect(0, 0, 14, size);
-    ctx.fillRect(size - 14, 0, 14, size);
-    ctx.save();
-    ctx.translate(size / 2, size / 2);
-    ctx.rotate(Math.PI / 4);
-    ctx.fillRect(-size * 0.62, -7, size * 1.24, 14);
-    ctx.restore();
-    ctx.globalAlpha = 1;
+  return paintCanvas(256, (g, side, next) => {
+    g.fillStyle = face;
+    g.fillRect(0, 0, side, side);
+    speckle(g, side, next, 500, dark, 0.8, 2, 0.5);
+    g.fillStyle = dark;
+    g.globalAlpha = 0.85;
+    g.fillRect(0, 0, side, 14);
+    g.fillRect(0, side - 14, side, 14);
+    g.fillRect(0, 0, 14, side);
+    g.fillRect(side - 14, 0, 14, side);
+    g.save();
+    g.translate(side / 2, side / 2);
+    g.rotate(Math.PI / 4);
+    g.fillRect(-side * 0.62, -7, side * 1.24, 14);
+    g.restore();
+    g.globalAlpha = 1;
     // Stencil mark.
-    ctx.strokeStyle = THEME.accent;
-    ctx.globalAlpha = 0.85;
-    ctx.lineWidth = 3;
-    ctx.strokeRect(size * 0.32, size * 0.36, size * 0.36, size * 0.28);
-    ctx.beginPath();
-    ctx.moveTo(size * 0.38, size * 0.5);
-    ctx.lineTo(size * 0.62, size * 0.5);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
+    g.strokeStyle = THEME.accent;
+    g.globalAlpha = 0.85;
+    g.lineWidth = 3;
+    g.strokeRect(side * 0.32, side * 0.36, side * 0.36, side * 0.28);
+    g.beginPath();
+    g.moveTo(side * 0.38, side * 0.5);
+    g.lineTo(side * 0.62, side * 0.5);
+    g.stroke();
+    g.globalAlpha = 1;
   }, { repeat: [1, 1], seed });
 }
 
@@ -319,138 +319,139 @@ export function buildingFacadeTexture(seed = 41, {
   floors = 6, cols = 5, litRatio = 0.35, base = '#6a5a52', dark = '#453a34',
   shop = false,
 } = {}) {
-  const mapCanvas = document.createElement('canvas');
-  mapCanvas.width = 256;
-  mapCanvas.height = 512;
-  const emCanvas = document.createElement('canvas');
-  emCanvas.width = 256;
-  emCanvas.height = 512;
-  const mapCtx = mapCanvas.getContext('2d');
-  const emCtx = emCanvas.getContext('2d');
-  const random = mulberry32(seed);
-  mapCtx.fillStyle = base;
-  mapCtx.fillRect(0, 0, 256, 512);
-  emCtx.fillStyle = '#000000';
-  emCtx.fillRect(0, 0, 256, 512);
+  const faceCanvas = document.createElement('canvas');
+  faceCanvas.width = 256;
+  faceCanvas.height = 512;
+  const glowCanvas = document.createElement('canvas');
+  glowCanvas.width = 256;
+  glowCanvas.height = 512;
+  const face = faceCanvas.getContext('2d');
+  const glow = glowCanvas.getContext('2d');
+  const next = mulberry32(seed);
+  face.fillStyle = base;
+  face.fillRect(0, 0, 256, 512);
+  glow.fillStyle = '#000000';
+  glow.fillRect(0, 0, 256, 512);
   // Grime + floor bands on the map canvas.
   for (let i = 0; i < 14; i += 1) {
-    mapCtx.fillStyle = dark;
-    mapCtx.globalAlpha = 0.08 + random() * 0.12;
-    mapCtx.fillRect(random() * 256, random() * 512, 30 + random() * 80, 12 + random() * 40);
+    face.fillStyle = dark;
+    face.globalAlpha = 0.08 + next() * 0.12;
+    face.fillRect(next() * 256, next() * 512, 30 + next() * 80, 12 + next() * 40);
   }
-  mapCtx.globalAlpha = 1;
-  const floorH = 512 / floors;
-  const colW = 256 / cols;
-  const winW = colW * 0.52;
-  const winH = floorH * 0.52;
-  const shopRows = shop ? 1 : 0;
+  face.globalAlpha = 1;
+  const storeyH = 512 / floors;
+  const bayW = 256 / cols;
+  const paneW = bayW * 0.52;
+  const paneH = storeyH * 0.52;
+  const shopFloors = shop ? 1 : 0;
+  void shopFloors;
   for (let f = 0; f < floors; f += 1) {
-    const y = f * floorH;
-    mapCtx.fillStyle = dark;
-    mapCtx.globalAlpha = 0.5;
-    mapCtx.fillRect(0, y, 256, 2);
-    mapCtx.globalAlpha = 1;
+    const y = f * storeyH;
+    face.fillStyle = dark;
+    face.globalAlpha = 0.5;
+    face.fillRect(0, y, 256, 2);
+    face.globalAlpha = 1;
     if (shop && f === floors - 1) {
       // Ground-floor storefront: glass band + sign strip + awning line.
-      mapCtx.fillStyle = '#1d2c33';
-      mapCtx.fillRect(8, y + floorH * 0.32, 240, floorH * 0.62);
-      mapCtx.fillStyle = '#ffd27a';
-      mapCtx.globalAlpha = 0.85;
-      for (let x = 24; x < 240; x += 28) mapCtx.fillRect(x, y + floorH * 0.36, 12, floorH * 0.5);
-      mapCtx.globalAlpha = 1;
-      emCtx.fillStyle = '#ffca6a';
-      emCtx.fillRect(8, y + floorH * 0.32, 240, floorH * 0.62);
-      mapCtx.fillStyle = THEME.accent;
-      mapCtx.fillRect(0, y + floorH * 0.08, 256, floorH * 0.2);
+      face.fillStyle = '#1d2c33';
+      face.fillRect(8, y + storeyH * 0.32, 240, storeyH * 0.62);
+      face.fillStyle = '#ffd27a';
+      face.globalAlpha = 0.85;
+      for (let x = 24; x < 240; x += 28) face.fillRect(x, y + storeyH * 0.36, 12, storeyH * 0.5);
+      face.globalAlpha = 1;
+      glow.fillStyle = '#ffca6a';
+      glow.fillRect(8, y + storeyH * 0.32, 240, storeyH * 0.62);
+      face.fillStyle = THEME.accent;
+      face.fillRect(0, y + storeyH * 0.08, 256, storeyH * 0.2);
       continue;
     }
     for (let c = 0; c < cols; c += 1) {
-      const x = c * colW + (colW - winW) / 2;
-      const wy = y + (floorH - winH) / 2;
-      const lit = random() < litRatio;
-      const warm = random() < 0.7;
+      const x = c * bayW + (bayW - paneW) / 2;
+      const wy = y + (storeyH - paneH) / 2;
+      const lit = next() < litRatio;
+      const warm = next() < 0.7;
       if (lit) {
-        mapCtx.fillStyle = warm ? '#ffd27a' : '#9fd8ff';
-        emCtx.fillStyle = warm ? '#ffca6a' : '#8fd0ff';
+        face.fillStyle = warm ? '#ffd27a' : '#9fd8ff';
+        glow.fillStyle = warm ? '#ffca6a' : '#8fd0ff';
       } else {
-        mapCtx.fillStyle = '#232a33';
-        emCtx.fillStyle = '#000000';
+        face.fillStyle = '#232a33';
+        glow.fillStyle = '#000000';
       }
-      mapCtx.fillRect(x, wy, winW, winH);
-      emCtx.fillRect(x, wy, winW, winH);
+      face.fillRect(x, wy, paneW, paneH);
+      glow.fillRect(x, wy, paneW, paneH);
       // Window frame + mullion cross.
-      mapCtx.fillStyle = dark;
-      mapCtx.fillRect(x - 2, wy - 2, winW + 4, 3);
-      mapCtx.fillRect(x - 2, wy + winH - 1, winW + 4, 3);
-      mapCtx.fillRect(x + winW / 2 - 1, wy, 2, winH);
+      face.fillStyle = dark;
+      face.fillRect(x - 2, wy - 2, paneW + 4, 3);
+      face.fillRect(x - 2, wy + paneH - 1, paneW + 4, 3);
+      face.fillRect(x + paneW / 2 - 1, wy, 2, paneH);
       // AC unit under some windows.
-      if (random() < 0.3) {
-        mapCtx.fillStyle = '#8a8a82';
-        mapCtx.fillRect(x + winW * 0.2, wy + winH + 3, winW * 0.6, 7);
-        mapCtx.fillStyle = dark;
-        mapCtx.fillRect(x + winW * 0.2, wy + winH + 5, winW * 0.6, 1);
+      if (next() < 0.3) {
+        face.fillStyle = '#8a8a82';
+        face.fillRect(x + paneW * 0.2, wy + paneH + 3, paneW * 0.6, 7);
+        face.fillStyle = dark;
+        face.fillRect(x + paneW * 0.2, wy + paneH + 5, paneW * 0.6, 1);
       }
     }
   }
-  const map = new THREE.CanvasTexture(mapCanvas);
+  const map = new THREE.CanvasTexture(faceCanvas);
   map.colorSpace = THREE.SRGBColorSpace;
   map.anisotropy = 4;
-  const emissive = new THREE.CanvasTexture(emCanvas);
+  const emissive = new THREE.CanvasTexture(glowCanvas);
   emissive.colorSpace = THREE.SRGBColorSpace;
   return { map, emissive };
 }
 
 // Roll-up warehouse door: horizontal slats + hazard stripe at the base.
 export function doorTexture(seed = 53) {
-  const random = mulberry32(seed);
-  return makeCanvas(256, (ctx, size) => {
-    ctx.fillStyle = '#5d6066';
-    ctx.fillRect(0, 0, size, size);
-    for (let y = 0; y < size; y += 18) {
-      ctx.fillStyle = '#4a4d52';
-      ctx.fillRect(0, y, size, 4);
-      ctx.fillStyle = '#6e7278';
-      ctx.fillRect(0, y + 4, size, 2);
+  const next = mulberry32(seed);
+  return paintCanvas(256, (g, side) => {
+    g.fillStyle = '#5d6066';
+    g.fillRect(0, 0, side, side);
+    for (let y = 0; y < side; y += 18) {
+      g.fillStyle = '#4a4d52';
+      g.fillRect(0, y, side, 4);
+      g.fillStyle = '#6e7278';
+      g.fillRect(0, y + 4, side, 2);
     }
-    dots(ctx, size, random, 500, '#3a3d42', 0.8, 2, 0.5);
+    speckle(g, side, next, 500, '#3a3d42', 0.8, 2, 0.5);
     // Hazard stripe along the bottom.
     for (let i = 0; i < 8; i += 1) {
-      ctx.fillStyle = i % 2 ? '#c8a52a' : '#1c1c1c';
-      ctx.save();
-      ctx.translate(i * 32, size - 22);
-      ctx.rotate(-0.6);
-      ctx.fillRect(-8, 0, 16, 22);
-      ctx.restore();
+      g.fillStyle = i % 2 ? '#c8a52a' : '#1c1c1c';
+      g.save();
+      g.translate(i * 32, side - 22);
+      g.rotate(-0.6);
+      g.fillRect(-8, 0, 16, 22);
+      g.restore();
     }
     // Stencilled depot number.
-    ctx.fillStyle = '#e8e2d4';
-    ctx.font = '700 34px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('DEPOT 7', size / 2, size * 0.42);
+    g.fillStyle = '#e8e2d4';
+    g.font = '700 34px system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.fillText('DEPOT 7', side / 2, side * 0.42);
   }, { repeat: [1, 1], seed });
 }
 
 // Asphalt road strip with a faded dashed centre line (laid as a plane).
 export function roadTexture(seed = 61) {
-  const random = mulberry32(seed);
+  const next = mulberry32(seed);
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#3a3630';
-  ctx.fillRect(0, 0, 128, 512);
-  dots(ctx, 128, random, 700, '#2a2723', 0.8, 2.4, 0.6);
-  dots(ctx, 128, random, 300, '#4a463e', 0.8, 2, 0.5);
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#3a3630';
+  g.fillRect(0, 0, 128, 512);
+  speckle(g, 128, next, 700, '#2a2723', 0.8, 2.4, 0.6);
+  speckle(g, 128, next, 300, '#4a463e', 0.8, 2, 0.5);
   // Edge lines.
-  ctx.fillStyle = '#c8c2ae';
-  ctx.globalAlpha = 0.55;
-  ctx.fillRect(6, 0, 3, 512);
-  ctx.fillRect(119, 0, 3, 512);
+  g.fillStyle = '#c8c2ae';
+  g.globalAlpha = 0.55;
+  g.fillRect(6, 0, 3, 512);
+  g.fillRect(119, 0, 3, 512);
   // Faded dashed centre line.
-  ctx.fillStyle = '#c8b45a';
-  ctx.globalAlpha = 0.5;
-  for (let y = 0; y < 512; y += 64) ctx.fillRect(61, y, 6, 34);
-  ctx.globalAlpha = 1;
+  g.fillStyle = '#c8b45a';
+  g.globalAlpha = 0.5;
+  for (let y = 0; y < 512; y += 64) g.fillRect(61, y, 6, 34);
+  g.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -462,14 +463,14 @@ export function shopSignTexture(text, color = '#ffb347') {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 64;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#1c1712';
-  ctx.fillRect(0, 0, 256, 64);
-  ctx.fillStyle = color;
-  ctx.font = '700 34px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, 128, 34);
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#1c1712';
+  g.fillRect(0, 0, 256, 64);
+  g.fillStyle = color;
+  g.font = '700 34px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 128, 34);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -477,33 +478,33 @@ export function shopSignTexture(text, color = '#ffb347') {
 
 // Spray-paint graffiti tag on a transparent canvas (decals on walls).
 export function graffitiTexture(seed = 71, hue = '#ff5a4e') {
-  const random = mulberry32(seed);
+  const next = mulberry32(seed);
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, 256, 128);
-  ctx.strokeStyle = hue;
-  ctx.globalAlpha = 0.85;
-  ctx.lineWidth = 7;
-  ctx.lineCap = 'round';
+  const g = canvas.getContext('2d');
+  g.clearRect(0, 0, 256, 128);
+  g.strokeStyle = hue;
+  g.globalAlpha = 0.85;
+  g.lineWidth = 7;
+  g.lineCap = 'round';
   for (let s = 0; s < 3; s += 1) {
-    ctx.beginPath();
-    let x = 20 + random() * 30;
-    let y = 30 + random() * 60;
-    ctx.moveTo(x, y);
+    g.beginPath();
+    let x = 20 + next() * 30;
+    let y = 30 + next() * 60;
+    g.moveTo(x, y);
     for (let i = 0; i < 5; i += 1) {
-      x += 30 + random() * 40;
-      y += (random() - 0.5) * 50;
-      ctx.quadraticCurveTo(x - 15, y + (random() - 0.5) * 40, x, y);
+      x += 30 + next() * 40;
+      y += (next() - 0.5) * 50;
+      g.quadraticCurveTo(x - 15, y + (next() - 0.5) * 40, x, y);
     }
-    ctx.stroke();
+    g.stroke();
   }
-  ctx.fillStyle = '#f2ede4';
-  ctx.globalAlpha = 0.9;
-  ctx.font = '700 26px system-ui, sans-serif';
-  ctx.fillText('EMBER', 30 + random() * 60, 100);
-  ctx.globalAlpha = 1;
+  g.fillStyle = '#f2ede4';
+  g.globalAlpha = 0.9;
+  g.font = '700 26px system-ui, sans-serif';
+  g.fillText('EMBER', 30 + next() * 60, 100);
+  g.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -514,16 +515,16 @@ export function hazardTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#c8a52a';
-  ctx.fillRect(0, 0, 128, 128);
-  ctx.fillStyle = '#1c1c1c';
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#c8a52a';
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = '#1c1c1c';
   for (let i = -2; i < 6; i += 1) {
-    ctx.save();
-    ctx.translate(i * 32, 0);
-    ctx.rotate(0.6);
-    ctx.fillRect(-8, -40, 16, 220);
-    ctx.restore();
+    g.save();
+    g.translate(i * 32, 0);
+    g.rotate(0.6);
+    g.fillRect(-8, -40, 16, 220);
+    g.restore();
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
@@ -534,26 +535,26 @@ export function hazardTexture() {
 
 // Small wall poster: coloured header + title lines (invented text only).
 export function posterTexture(seed = 83, title = 'EMBERLINE', color = '#e8843c') {
-  const random = mulberry32(seed);
+  const next = mulberry32(seed);
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 192;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#e8e2d4';
-  ctx.fillRect(0, 0, 128, 192);
-  ctx.fillStyle = color;
-  ctx.fillRect(0, 0, 128, 52);
-  ctx.fillStyle = '#1c1712';
-  ctx.font = '700 17px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(title, 64, 96);
-  ctx.font = '500 12px system-ui, sans-serif';
-  ctx.fillText('RAIL YARD', 64, 118);
-  ctx.fillText('EST. 1987', 64, 136);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
-  ctx.strokeRect(4, 4, 120, 184);
-  dots(ctx, 128, random, 120, '#8a8578', 0.8, 2, 0.4);
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#e8e2d4';
+  g.fillRect(0, 0, 128, 192);
+  g.fillStyle = color;
+  g.fillRect(0, 0, 128, 52);
+  g.fillStyle = '#1c1712';
+  g.font = '700 17px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.fillText(title, 64, 96);
+  g.font = '500 12px system-ui, sans-serif';
+  g.fillText('RAIL YARD', 64, 118);
+  g.fillText('EST. 1987', 64, 136);
+  g.strokeStyle = color;
+  g.lineWidth = 3;
+  g.strokeRect(4, 4, 120, 184);
+  speckle(g, 128, next, 120, '#8a8578', 0.8, 2, 0.4);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
